@@ -1,5 +1,6 @@
 import json
 from datetime import timezone
+from decimal import Decimal
 from typing import Optional
 
 from django.conf import settings
@@ -7,6 +8,8 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import NOT_PROVIDED, DateTimeField, ForeignKey, JSONField, Model
 from django.utils import timezone as django_timezone
 from django.utils.encoding import smart_str
+
+AUDITLOG_BUGGY_REPR_DATATYPES = (Decimal,)
 
 
 def track_field(field):
@@ -63,6 +66,7 @@ def get_field_value(obj, field):
     :rtype: str
     """
     try:
+
         if isinstance(field, DateTimeField):
             # DateTimeFields are timezone-aware, so we need to convert the field
             # to its naive form before we can accurately compare them for changes.
@@ -81,14 +85,22 @@ def get_field_value(obj, field):
                 getattr(obj, field.get_attname(), None), strings_only=True
             )
         else:
-            value = smart_str(getattr(obj, field.name, None))
+            raw_value = getattr(obj, field.name, None)
+            if isinstance(raw_value, list) and raw_value:
+                # Make sure that the real values of the array items are used and
+                # not their repr
+                value = [
+                    str(o) if isinstance(o, AUDITLOG_BUGGY_REPR_DATATYPES) else o
+                    for o in raw_value
+                ]
+            else:
+                value = smart_str(raw_value)
     except ObjectDoesNotExist:
         value = (
             field.default
             if getattr(field, "default", NOT_PROVIDED) is not NOT_PROVIDED
             else None
         )
-
     return value
 
 
@@ -194,5 +206,4 @@ def model_instance_diff(
 
     if len(diff) == 0:
         diff = None
-
     return diff
