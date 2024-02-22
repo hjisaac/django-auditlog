@@ -80,3 +80,6 @@ venv.bak/
 
 ### JetBrains
 .idea/
+
+## 
+auditlog_tests/local_test_settings.py
